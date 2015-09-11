@@ -11,15 +11,19 @@ import (
   "net/http"
 )
 
-type session struct {
-	*amqp.Connection
-	*amqp.Channel
+type rabbit_session struct {
+  *amqp.Connection
+  *amqp.Channel
   amqp.Queue
+}
+
+type client_session struct {
+  Key string
 }
 
 var rabbit = GetRabbit()
 
-func GetRabbit() (s session){
+func GetRabbit() (s rabbit_session){
   conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
   failOnError(err, "Failed to connect to RabbitMQ")
   defer conn.Close()
@@ -35,7 +39,18 @@ func GetRabbit() (s session){
     nil, // arguments
   )
   failOnError(err, "Failed to declare a queue")
-  return session{conn, ch, q}
+  return rabbit_session{conn, ch, q}
+}
+
+func IssueSession(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+  se := client_session{"test_session_key",}
+  js, err := json.Marshal(se)
+  if err != nil {
+    http.Error(w, err.Error(), http.StatusInternalServerError)
+    return
+  }
+  w.Header().Set("Content-Type", "application/json")
+  w.Write(js)
 }
 
 func InsertLog(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
@@ -54,6 +69,7 @@ func failOnError(err error, msg string) {
 
 func main() {
     router := httprouter.New()
+    router.GET("/honeyqa/connect", IssueSession)
     router.POST("/log/insert", InsertLog)
     log.Fatal(http.ListenAndServe(":8080", router))
 }
